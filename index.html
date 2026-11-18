@@ -1,6 +1,45 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>Our Sudoku — Prototype 1</title><style>
 :root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#243342;background:#f6f7f5}*{box-sizing:border-box}body{margin:0;padding:12px}main{max-width:620px;margin:auto}h1{font-size:23px;margin:6px 0 4px}p{margin:4px 0 12px;color:#526171;font-size:13px}.bar,.actions,.digits{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}button,select{font:inherit;border:1px solid #b8c5ce;background:white;border-radius:8px;padding:9px 12px;color:#253a4a}button:active{transform:scale(.97)}button.active{background:#1c637c;color:white}button:disabled{opacity:.4}.board{display:grid;grid-template-columns:repeat(9,1fr);width:100%;aspect-ratio:1;border:3px solid #334f61;background:#334f61;gap:1px;touch-action:manipulation}.cell{position:relative;border:0;border-radius:0;padding:0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:clamp(17px,5vw,31px);font-weight:500;min-width:0;min-height:0}.cell.shade{background:#eaf0f2}.cell.given{font-weight:750;color:#263b4c}.cell.selected{background:#f5df9e}.cell.peer:not(.selected){background:#d9e9ec}.cell.same:not(.selected){color:#086d9a}.cell.bad{color:#b3261e!important}.cell.boxright{border-right:2px solid #334f61}.cell.boxbottom{border-bottom:2px solid #334f61}.notes{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);width:100%;height:100%;align-items:center;justify-items:center;font-size:clamp(8px,2.1vw,13px);color:#526b7a}.digits{display:grid;grid-template-columns:repeat(9,1fr)}.digits button{padding:10px 0;font-size:20px;font-weight:600}.digits .small{font-size:16px}.label{font-size:12px;font-weight:700;color:#536674;margin:12px 0 0}.status{min-height:24px;font-size:13px;color:#456071}.footer{font-size:12px;color:#647480;margin:16px 0} @media(min-width:600px){.cell{font-size:30px}.notes{font-size:13px}}
-</style></head><body><main><h1>Our Sudoku <span style="font-size:13px;font-weight:400">Prototype 1</span></h1><p>A first playable version for your iPad. No account or installation required.</p><div class="bar"><label>Difficulty <select id="difficulty"><option value="easy">Easy</option><option value="moderate" selected>Moderate</option><option value="difficult">Difficult</option></select></label><button id="new">New puzzle</button><button id="reset">Restart puzzle</button></div><div id="board" class="board" role="grid" aria-label="Sudoku board"></div><div class="label">LARGE NUMBERS — fill a cell</div><div class="digits" id="big"></div><div class="label">SMALL NUMBERS — pencil marks</div><div class="digits" id="small"></div><div class="actions"><button id="erase">Erase</button><button id="undo">Undo</button><button id="redo">Redo</button><button id="candidates">Fill pencil marks</button><button id="hint">Hint</button><button id="check">Check</button></div><div class="status" id="status" aria-live="polite">Tap a square, then a number.</div><div class="footer">Pencil marks are optional. Entering a large number automatically erases affected pencil marks. Progress is saved in this browser on this device. This is a prototype, not the final game.</div></main><script>
+
+/* Size the board against the visible viewport, including Safari toolbar changes. */
+body{padding:12px;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+main{max-width:1100px}
+header,.bar,.controls{min-width:0}
+.bar{align-items:center}
+.bar label{display:flex;align-items:center;gap:8px}
+button,select{min-height:44px;touch-action:manipulation}
+.board{grid-template-rows:repeat(9,minmax(0,1fr));max-width:620px;margin-inline:auto;width:min(100%,calc(100vh - 450px));width:min(100%,calc(100dvh - 450px))}
+.controls{max-width:620px;margin-inline:auto}
+.status{min-height:36px;line-height:18px;overflow-wrap:anywhere}
+.footer{line-height:16px;margin:8px 0 0}
+@media (min-width:900px) and (orientation:landscape){
+ main{display:grid;grid-template-columns:minmax(0,1fr) 320px;column-gap:24px;row-gap:8px;align-items:start}
+ header{grid-column:1 / -1}
+ header p{margin-bottom:0}
+ .bar{grid-column:2;grid-row:2;margin:0;gap:8px}
+ .bar label{width:100%;justify-content:space-between}
+ .bar select{flex:1}
+ .bar button{flex:1}
+ .board{grid-column:1;grid-row:2 / 4;width:min(100%,calc(100vh - 110px));width:min(100%,calc(100dvh - 110px))}
+ .controls{grid-column:2;grid-row:3;width:100%;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:12px}
+ .controls > .label:first-child{grid-column:1;grid-row:1}
+ .controls > .label ~ .label{grid-column:2;grid-row:1}
+ #big{grid-column:1;grid-row:2}
+ #small{grid-column:2;grid-row:2}
+ .controls > .actions,.controls > .status,.controls > .footer{grid-column:1 / -1}
+ .digits{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:6px 0}
+ .digits button{padding:8px 0}
+ .label{margin-top:8px}
+ .actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0}
+ .actions button{padding:8px 4px;font-size:14px}
+ #candidates{grid-column:1 / -1}
+}
+@media (max-width:599px){
+ .board{width:100%}
+ .bar{gap:6px}
+ .bar button{padding-inline:8px}
+}
+</style></head><body><main><header><h1>Our Sudoku <span style="font-size:13px;font-weight:400">Prototype 1</span></h1><p>A first playable version for your iPad. No account or installation required.</p></header><div class="bar"><label>Difficulty <select id="difficulty"><option value="easy">Easy</option><option value="moderate" selected>Moderate</option><option value="difficult">Difficult</option></select></label><button id="new">New puzzle</button><button id="reset">Restart puzzle</button></div><div id="board" class="board" role="grid" aria-label="Sudoku board"></div><section class="controls" aria-label="Game controls"><div class="label">LARGE NUMBERS — fill a cell</div><div class="digits" id="big"></div><div class="label">SMALL NUMBERS — pencil marks</div><div class="digits" id="small"></div><div class="actions"><button id="erase">Erase</button><button id="undo">Undo</button><button id="redo">Redo</button><button id="candidates">Fill pencil marks</button><button id="hint">Hint</button><button id="check">Check</button></div><div class="status" id="status" aria-live="polite">Tap a square, then a number.</div><div class="footer">Pencil marks are optional. Entering a large number automatically erases affected pencil marks. Progress is saved in this browser on this device. This is a prototype, not the final game.</div></section></main><script>
 const puzzles={easy:[['530070000600195000098000060800060003400803001700020006060000280000419005000080079','534678912672195348198342567859761423426853791713924856961537284287419635345286179'],['000260701680070090190004500820100040004602900050003028009300074040050036703018000','435269781682571493197834562826195347374682915951743628519326874248957136763418259']],moderate:[['030678900000105048090302007859700000000853090003004000900530080000419030045006109','534678912672195348198342567859761423426853791713924856961537284287419635345286179'],['504000900070000040098000000850761420400803091003900806000007000087400600340006000','534678912672195348198342567859761423426853791713924856961537284287419635345286179']],difficult:[['000070010002190300100000500000000020026050090710904050901030200000019005000000109','534678912672195348198342567859761423426853791713924856961537284287419635345286179']]};
 // Validate puzzles before enabling a game; omit any accidentally mistyped source puzzle.
 function valid(p,s){if(p.length!==81||s.length!==81)return false;for(let i=0;i<81;i++)if(p[i]!=='0'&&p[i]!==s[i])return false;for(let k=0;k<9;k++){for(let indices of [Array.from({length:9},(_,j)=>k*9+j),Array.from({length:9},(_,j)=>j*9+k),Array.from({length:9},(_,j)=>Math.floor(k/3)*27+(k%3)*3+Math.floor(j/3)*9+j%3)])if(new Set(indices.map(i=>s[i])).size!==9)return false}return true}
