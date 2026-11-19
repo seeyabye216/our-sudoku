@@ -39,12 +39,84 @@ button,select{min-height:44px;touch-action:manipulation}
  .bar{gap:6px}
  .bar button{padding-inline:8px}
 }
-</style></head><body><main><header><h1>Our Sudoku <span style="font-size:13px;font-weight:400">Prototype 1</span></h1><p>A first playable version for your iPad. No account or installation required.</p></header><div class="bar"><label>Difficulty <select id="difficulty"><option value="easy">Easy</option><option value="moderate" selected>Moderate</option><option value="difficult">Difficult</option></select></label><button id="new">New puzzle</button><button id="reset">Restart puzzle</button></div><div id="board" class="board" role="grid" aria-label="Sudoku board"></div><section class="controls" aria-label="Game controls"><div class="label">LARGE NUMBERS — fill a cell</div><div class="digits" id="big"></div><div class="label">SMALL NUMBERS — pencil marks</div><div class="digits" id="small"></div><div class="actions"><button id="erase">Erase</button><button id="undo">Undo</button><button id="redo">Redo</button><button id="candidates">Fill pencil marks</button><button id="hint">Hint</button><button id="check">Check</button></div><div class="status" id="status" aria-live="polite">Tap a square, then a number.</div><div class="footer">Pencil marks are optional. Entering a large number automatically erases affected pencil marks. Progress is saved in this browser on this device. This is a prototype, not the final game.</div></section></main><script>
+</style></head><body><main><header><h1>Our Sudoku <span style="font-size:13px;font-weight:400">Prototype 1</span></h1><p>A first playable version for your iPad. No account or installation required.</p></header><div class="bar"><label>Difficulty <select id="difficulty"><option value="easy">Easy</option><option value="moderate" selected>Moderate</option><option value="difficult">Difficult</option></select></label><button id="new">New puzzle</button><button id="reset">Restart puzzle</button></div><div id="board" class="board" role="grid" aria-label="Sudoku board"></div><section class="controls" aria-label="Game controls"><div class="label">LARGE NUMBERS — fill a cell</div><div class="digits" id="big"></div><div class="label">SMALL NUMBERS — pencil marks</div><div class="digits" id="small"></div><div class="actions"><button id="erase">Erase</button><button id="undo">Undo</button><button id="redo">Redo</button><button id="candidates">Fill pencil marks</button><button id="hint">Hint</button><button id="check">Check</button></div><div class="status" id="status" aria-live="polite">Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.</div><div class="footer">Pencil marks are optional. Entering a large number automatically erases affected pencil marks. Progress is saved in this browser on this device. This is a prototype, not the final game.</div></section></main><script>
 const puzzles={easy:[['530070000600195000098000060800060003400803001700020006060000280000419005000080079','534678912672195348198342567859761423426853791713924856961537284287419635345286179'],['000260701680070090190004500820100040004602900050003028009300074040050036703018000','435269781682571493197834562826195347374682915951743628519326874248957136763418259']],moderate:[['030678900000105048090302007859700000000853090003004000900530080000419030045006109','534678912672195348198342567859761423426853791713924856961537284287419635345286179'],['504000900070000040098000000850761420400803091003900806000007000087400600340006000','534678912672195348198342567859761423426853791713924856961537284287419635345286179']],difficult:[['000070010002190300100000500000000020026050090710904050901030200000019005000000109','534678912672195348198342567859761423426853791713924856961537284287419635345286179']]};
 // Validate puzzles before enabling a game; omit any accidentally mistyped source puzzle.
 function valid(p,s){if(p.length!==81||s.length!==81)return false;for(let i=0;i<81;i++)if(p[i]!=='0'&&p[i]!==s[i])return false;for(let k=0;k<9;k++){for(let indices of [Array.from({length:9},(_,j)=>k*9+j),Array.from({length:9},(_,j)=>j*9+k),Array.from({length:9},(_,j)=>Math.floor(k/3)*27+(k%3)*3+Math.floor(j/3)*9+j%3)])if(new Set(indices.map(i=>s[i])).size!==9)return false}return true}
-const pool=Object.fromEntries(Object.entries(puzzles).map(([k,v])=>[k,v.filter(([p,s])=>valid(p,s))]));let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}function render(){let board=$('board');board.innerHTML='';for(let i=0;i<81;i++){let b=document.createElement('button');b.className='cell'+((Math.floor(i/27)+Math.floor(i%9/3))%2?' shade':'')+(puzzle[i]!=='0'?' given':'')+(i%9===2||i%9===5?' boxright':'')+(Math.floor(i/9)===2||Math.floor(i/9)===5?' boxbottom':'')+(selected===i?' selected':peers(selected,i)?' peer':'')+(entries[i]&&entries[i]===entries[selected]&&i!==selected?' same':'');b.setAttribute('aria-label',`Row ${Math.floor(i/9)+1} column ${i%9+1}, ${entries[i]||'empty'}`);b.onclick=()=>{selected=i;render()};if(entries[i]){b.textContent=entries[i];if(puzzle[i]==='0'&&entries.some((x,j)=>x===entries[i]&&peers(i,j)))b.classList.add('bad')}else if(notes[i].length){let n=document.createElement('span');n.className='notes';for(let j=1;j<=9;j++){let t=document.createElement('span');t.textContent=notes[i].includes(j)?j:'';n.append(t)}b.append(n)}board.append(b)}$('undo').disabled=!history.length;$('redo').disabled=!future.length;save()}
-function input(n,small=false){if(puzzle[selected]!=='0'){$('status').textContent='That number is part of the original puzzle.';return}commit();if(small){if(!entries[selected]){let a=notes[selected];notes[selected]=a.includes(n)?a.filter(x=>x!==n):[...a,n].sort()}}else{entries[selected]=n;notes[selected]=[];for(let i=0;i<81;i++)if(peers(i,selected))notes[i]=notes[i].filter(x=>x!==n)}$('status').textContent='';render();if(entries.every((x,i)=>x===Number(solution[i])))$('status').textContent='Puzzle solved! Well done!'}function start(level,idx=0){let a=pool[level];if(!a?.length){$('status').textContent='This difficulty is temporarily unavailable.';return}difficulty=level;[puzzle,solution]=a[idx%a.length];entries=[...puzzle].map(Number);notes=Array.from({length:81},()=>[]);selected=entries.findIndex(x=>!x);history=[];future=[];$('difficulty').value=level;$('status').textContent='New puzzle ready. Tap a square, then a number.';render()}
-for(let n=1;n<=9;n++){for(let [id,small] of [['big',false],['small',true]]){let b=document.createElement('button');b.textContent=n;b.className=small?'small':'';b.onclick=()=>input(n,small);$(id).append(b)}}$('new').onclick=()=>start($('difficulty').value,Math.floor(Math.random()*pool[$('difficulty').value].length));$('difficulty').onchange=()=>start($('difficulty').value);$('reset').onclick=()=>{if(confirm('Restart this puzzle and clear your entries?'))start(difficulty,pool[difficulty].findIndex(x=>x[0]===puzzle))};$('erase').onclick=()=>{if(puzzle[selected]!=='0')return;commit();entries[selected]=0;notes[selected]=[];render()};$('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());let s=history.pop();entries=s.entries;notes=s.notes;render()};$('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());let s=future.pop();entries=s.entries;notes=s.notes;render()};$('candidates').onclick=()=>{commit();for(let i=0;i<81;i++)if(!entries[i])notes[i]=candidates(i);render();$('status').textContent='Pencil marks filled for empty squares.'};$('hint').onclick=()=>{let i=entries.findIndex((x,j)=>!x&&candidates(j).length===1);if(i<0){$('status').textContent='No naked single found. More advanced teaching hints are coming later.';return}selected=i;render();$('status').textContent=`Look at row ${Math.floor(i/9)+1}, column ${i%9+1}: only ${candidates(i)[0]} is possible here, based on the numbers already placed.`};$('check').onclick=()=>{let bad=entries.filter((x,i)=>x&&x!==Number(solution[i])).length;$('status').textContent=bad?`${bad} filled square(s) differ from the solution.`:'All filled numbers match the solution so far.'};
+const pool=Object.fromEntries(Object.entries(puzzles).map(([k,v])=>[k,v.filter(([p,s])=>valid(p,s))]));let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';
+let activeNumber = null;
+let squareFirst = false;
+const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}function render(){let board=$('board');board.innerHTML='';for(let i=0;i<81;i++){let b=document.createElement('button');b.className='cell'+((Math.floor(i/27)+Math.floor(i%9/3))%2?' shade':'')+(puzzle[i]!=='0'?' given':'')+(i%9===2||i%9===5?' boxright':'')+(Math.floor(i/9)===2||Math.floor(i/9)===5?' boxbottom':'')+(selected===i?' selected':peers(selected,i)?' peer':'')+(entries[i]&&entries[i]===entries[selected]&&i!==selected?' same':'');b.setAttribute('aria-label',`Row ${Math.floor(i/9)+1} column ${i%9+1}, ${entries[i]||'empty'}`);b.onclick=()=>selectSquare(i);if(entries[i]){b.textContent=entries[i];if(puzzle[i]==='0'&&entries.some((x,j)=>x===entries[i]&&peers(i,j)))b.classList.add('bad')}else if(notes[i].length){let n=document.createElement('span');n.className='notes';for(let j=1;j<=9;j++){let t=document.createElement('span');t.textContent=notes[i].includes(j)?j:'';n.append(t)}b.append(n)}board.append(b)}
+  for (const [id, pencil] of [['big', false], ['small', true]]) {
+    Array.from($(id).children).forEach((button, index) => {
+      const pressed = activeNumber?.digit === index + 1 && activeNumber.pencil === pencil;
+      button.classList.toggle('active', pressed);
+      button.setAttribute('aria-pressed', String(pressed));
+    });
+  }
+  $('undo').disabled=!history.length;$('redo').disabled=!future.length;save()}
+function selectSquare(index) {
+  selected = index;
+  squareFirst = !activeNumber;
+  if (activeNumber) {
+    input(activeNumber);
+  }
+  render();
+}
+
+function input({digit, pencil}, replace = false) {
+  if (puzzle[selected] !== '0') {
+    $('status').textContent = 'That number is part of the original puzzle.';
+    return;
+  }
+
+  const current = entries[selected];
+  if (current && (pencil || (!replace && current !== digit))) return;
+
+  commit();
+  if (pencil) {
+    const marks = notes[selected];
+    notes[selected] = marks.includes(digit)
+      ? marks.filter(mark => mark !== digit)
+      : [...marks, digit].sort();
+  } else if (current === digit) {
+    entries[selected] = 0;
+  } else {
+    entries[selected] = digit;
+    notes[selected] = [];
+    for (let i = 0; i < 81; i++) {
+      if (peers(i, selected)) notes[i] = notes[i].filter(mark => mark !== digit);
+    }
+  }
+  $('status').textContent = entries.every((value, i) => value === Number(solution[i]))
+    ? 'Puzzle solved! Well done!'
+    : '';
+}
+
+function selectNumber(digit, pencil) {
+  if (activeNumber?.digit === digit && activeNumber.pencil === pencil && !squareFirst) {
+    activeNumber = null;
+  } else {
+    activeNumber = {digit, pencil};
+    if (squareFirst) input(activeNumber, true);
+  }
+  squareFirst = false;
+  render();
+}
+
+function start(level,idx=0){let a=pool[level];if(!a?.length){$('status').textContent='This difficulty is temporarily unavailable.';return}difficulty=level;[puzzle,solution]=a[idx%a.length];entries=[...puzzle].map(Number);notes=Array.from({length:81},()=>[]);selected=entries.findIndex(x=>!x);history=[];future=[];squareFirst=false;$('difficulty').value=level;$('status').textContent='New puzzle ready. Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.';render()}
+
+for (const [id, pencil] of [['big', false], ['small', true]]) {
+  for (let digit = 1; digit <= 9; digit++) {
+    const button = document.createElement('button');
+    button.textContent = digit;
+    button.className = pencil ? 'small' : '';
+    button.setAttribute('aria-label', pencil ? `Pencil mark ${digit}` : `Enter ${digit}`);
+    button.setAttribute('aria-pressed', 'false');
+    button.onclick = () => selectNumber(digit, pencil);
+    $(id).append(button);
+  }
+}
+$('new').onclick=()=>start($('difficulty').value,Math.floor(Math.random()*pool[$('difficulty').value].length));$('difficulty').onchange=()=>start($('difficulty').value);$('reset').onclick=()=>{if(confirm('Restart this puzzle and clear your entries?'))start(difficulty,pool[difficulty].findIndex(x=>x[0]===puzzle))};$('erase').onclick=()=>{if(puzzle[selected]!=='0')return;commit();entries[selected]=0;notes[selected]=[];render()};$('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());let s=history.pop();entries=s.entries;notes=s.notes;render()};$('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());let s=future.pop();entries=s.entries;notes=s.notes;render()};$('candidates').onclick=()=>{commit();for(let i=0;i<81;i++)if(!entries[i])notes[i]=candidates(i);render();$('status').textContent='Pencil marks filled for empty squares.'};$('hint').onclick=()=>{let i=entries.findIndex((x,j)=>!x&&candidates(j).length===1);if(i<0){$('status').textContent='No naked single found. More advanced teaching hints are coming later.';return}selected=i;squareFirst=true;render();$('status').textContent=`Look at row ${Math.floor(i/9)+1}, column ${i%9+1}: only ${candidates(i)[0]} is possible here, based on the numbers already placed.`};$('check').onclick=()=>{let bad=entries.filter((x,i)=>x&&x!==Number(solution[i])).length;$('status').textContent=bad?`${bad} filled square(s) differ from the solution.`:'All filled numbers match the solution so far.'};
 try{let saved=JSON.parse(localStorage.getItem('our-sudoku-v1'));if(saved&&pool[saved.difficulty]?.some(x=>x[0]===saved.puzzle)&&saved.entries?.length===81&&saved.notes?.length===81){({puzzle,solution,entries,notes,difficulty}=saved);selected=entries.findIndex(x=>!x);if(selected<0)selected=0;$('difficulty').value=difficulty;render()}else start('moderate')}catch(e){start('moderate')}
 </script></body></html>
