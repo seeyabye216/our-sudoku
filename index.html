@@ -1,5 +1,31 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>Our Sudoku — Prototype 1</title><style>
-:root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#243342;background:#f6f7f5}*{box-sizing:border-box}body{margin:0;padding:12px}main{max-width:620px;margin:auto}h1{font-size:23px;margin:6px 0 4px}p{margin:4px 0 12px;color:#526171;font-size:13px}.bar{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}button,select{font:inherit;border:1px solid #b8c5ce;background:white;border-radius:8px;padding:9px 12px;color:#253a4a}button:active{transform:scale(.97)}button.active{background:#1c637c;color:white}button:disabled{opacity:.4}.board{display:grid;grid-template-columns:repeat(9,1fr);width:100%;aspect-ratio:1;border:3px solid #334f61;background:#334f61;gap:1px;touch-action:manipulation}.cell{position:relative;border:0;border-radius:0;padding:0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:clamp(17px,5vw,31px);font-weight:500;min-width:0;min-height:0}.cell.shade{background:#eaf0f2}.cell.given{font-weight:750;color:#263b4c}.cell.selected{background:#f5df9e}.cell.peer:not(.selected){background:#d9e9ec}.cell.same:not(.selected){color:#086d9a}.cell.bad{color:#b3261e!important}.cell.boxright{border-right:2px solid #334f61}.cell.boxbottom{border-bottom:2px solid #334f61}.notes{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);width:100%;height:100%;align-items:center;justify-items:center;font-size:clamp(8px,2.1vw,13px);color:#526b7a}.digits button{padding:10px 0;font-size:20px;font-weight:600}.digits .small{font-size:16px}.label{font-size:12px;font-weight:700;color:#536674;margin:12px 0 0}.status{min-height:24px;font-size:13px;color:#456071}.footer{font-size:12px;color:#647480;margin:16px 0} @media(min-width:600px){.cell{font-size:30px}.notes{font-size:13px}}
+:root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#243342;background:#f6f7f5}*{box-sizing:border-box}body{margin:0;padding:12px}main{max-width:620px;margin:auto}h1{font-size:23px;margin:6px 0 4px}p{margin:4px 0 12px;color:#526171;font-size:13px}.bar{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}button,select{font:inherit;border:1px solid #b8c5ce;background:white;border-radius:8px;padding:9px 12px;color:#253a4a}button:active{transform:scale(.97)}button.active{background:#1c637c;color:white}button:disabled{opacity:.4}.board{display:grid;grid-template-columns:repeat(9,1fr);width:100%;aspect-ratio:1;border:3px solid #334f61;background:#334f61;gap:1px;touch-action:manipulation}.cell{position:relative;border:0;border-radius:0;padding:0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:clamp(17px,5vw,31px);font-weight:500;min-width:0;min-height:0}.cell.shade{background:#eaf0f2}.cell.given{font-weight:750;color:#263b4c}.cell.selected{background:#f5df9e}.cell.peer:not(.selected){background:#d9e9ec}.cell.same:not(.selected){color:#086d9a}.cell.bad{color:#b3261e!important}.cell.boxright{border-right:2px solid #334f61}.cell.boxbottom{border-bottom:2px solid #334f61}.digits button{padding:10px 0;font-size:20px;font-weight:600}.digits .small{font-size:16px}.label{font-size:12px;font-weight:700;color:#536674;margin:12px 0 0}.status{min-height:24px;font-size:13px;color:#456071}.footer{font-size:12px;color:#647480;margin:16px 0} @media(min-width:600px){.cell{font-size:30px}}
+
+.cell { container-type: inline-size; }
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: #526b7a;
+  font-size: 10px;
+  font-size: clamp(10px, 40cqi, 19px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1;
+}
+.notes[data-rows="2"] {
+  font-size: 9px;
+  font-size: clamp(9px, 34cqi, 17px);
+}
+.notes[data-rows="3"] {
+  font-size: 8px;
+  font-size: min(29cqi, 16px);
+}
+.note-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.2em;
+}
 
 body {
   padding: 12px;
@@ -79,7 +105,7 @@ function valid(p,s){if(p.length!==81||s.length!==81)return false;for(let i=0;i<8
 const pool=Object.fromEntries(Object.entries(puzzles).map(([k,v])=>[k,v.filter(([p,s])=>valid(p,s))]));let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';
 let activeNumber = null;
 let squareFirst = false;
-const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}function render(){let board=$('board');board.innerHTML='';for(let i=0;i<81;i++){let b=document.createElement('button');b.className='cell'+((Math.floor(i/27)+Math.floor(i%9/3))%2?' shade':'')+(puzzle[i]!=='0'?' given':'')+(i%9===2||i%9===5?' boxright':'')+(Math.floor(i/9)===2||Math.floor(i/9)===5?' boxbottom':'')+(selected===i?' selected':peers(selected,i)?' peer':'')+(entries[i]&&entries[i]===entries[selected]&&i!==selected?' same':'');b.setAttribute('aria-label',`Row ${Math.floor(i/9)+1} column ${i%9+1}, ${entries[i]||'empty'}`);b.onclick=()=>selectSquare(i);if(entries[i]){b.textContent=entries[i];if(puzzle[i]==='0'&&entries.some((x,j)=>x===entries[i]&&peers(i,j)))b.classList.add('bad')}else if(notes[i].length){let n=document.createElement('span');n.className='notes';for(let j=1;j<=9;j++){let t=document.createElement('span');t.textContent=notes[i].includes(j)?j:'';n.append(t)}b.append(n)}board.append(b)}
+const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}function render(){let board=$('board');board.innerHTML='';for(let i=0;i<81;i++){let b=document.createElement('button');b.className='cell'+((Math.floor(i/27)+Math.floor(i%9/3))%2?' shade':'')+(puzzle[i]!=='0'?' given':'')+(i%9===2||i%9===5?' boxright':'')+(Math.floor(i/9)===2||Math.floor(i/9)===5?' boxbottom':'')+(selected===i?' selected':peers(selected,i)?' peer':'')+(entries[i]&&entries[i]===entries[selected]&&i!==selected?' same':'');b.setAttribute('aria-label',`Row ${Math.floor(i/9)+1} column ${i%9+1}, ${entries[i]||'empty'}`);b.onclick=()=>selectSquare(i);if(entries[i]){b.textContent=entries[i];if(puzzle[i]==='0'&&entries.some((x,j)=>x===entries[i]&&peers(i,j)))b.classList.add('bad')}else if(notes[i].length){b.append(renderNotes(notes[i]))}board.append(b)}
   for (const [id, pencil] of [['big', false], ['small', true]]) {
     Array.from($(id).children).forEach((button, index) => {
       const pressed = activeNumber?.digit === index + 1 && activeNumber.pencil === pencil;
@@ -88,6 +114,29 @@ const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.
     });
   }
   $('undo').disabled=!history.length;$('redo').disabled=!future.length;save()}
+function renderNotes(marks) {
+  const digits = [...marks].sort((a, b) => a - b);
+  const group = document.createElement('span');
+  group.className = 'notes';
+  const rowCount = Math.ceil(digits.length / 3);
+  group.dataset.rows = rowCount;
+
+  let offset = 0;
+  for (let rowsLeft = rowCount; rowsLeft > 0; rowsLeft--) {
+    const row = document.createElement('span');
+    row.className = 'note-row';
+    const rowLength = Math.ceil((digits.length - offset) / rowsLeft);
+    for (const digit of digits.slice(offset, offset + rowLength)) {
+      const mark = document.createElement('span');
+      mark.textContent = digit;
+      row.append(mark);
+    }
+    group.append(row);
+    offset += rowLength;
+  }
+  return group;
+}
+
 function selectSquare(index) {
   selected = index;
   squareFirst = !activeNumber;
