@@ -5,6 +5,13 @@
 .cell.shade { background: #f1f8fd; }
 .cell.selected { outline: 1px solid #60798a; outline-offset: -2px; }
 .cell.hinted { outline: 2px solid #1c637c; outline-offset: -3px; }
+#big button.active {
+  background: white;
+  color: #253a4a;
+  outline: 2px solid #1c637c;
+  outline-offset: -3px;
+}
+.cell.number-match, #big button.completed { background: #f9df78; }
 .notes {
   display: flex;
   flex-direction: column;
@@ -109,15 +116,56 @@ function valid(p,s){if(p.length!==81||s.length!==81)return false;for(let i=0;i<8
 const pool=Object.fromEntries(Object.entries(puzzles).map(([k,v])=>[k,v.filter(([p,s])=>valid(p,s))]));let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';
 let activeNumber = null;
 let squareFirst = false;
-const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}function render(){let board=$('board');board.innerHTML='';for(let i=0;i<81;i++){let b=document.createElement('button');b.className='cell'+((Math.floor(i/27)+Math.floor(i%9/3))%2?' shade':'')+(puzzle[i]!=='0'?' given':'')+(i%9===2||i%9===5?' boxright':'')+(Math.floor(i/9)===2||Math.floor(i/9)===5?' boxbottom':'')+(selected===i?' selected':'');b.setAttribute('aria-label',`Row ${Math.floor(i/9)+1} column ${i%9+1}, ${entries[i]||'empty'}`);b.onclick=()=>selectSquare(i);if(entries[i]){b.textContent=entries[i];if(puzzle[i]==='0'&&entries.some((x,j)=>x===entries[i]&&peers(i,j)))b.classList.add('bad')}else if(notes[i].length){b.append(renderNotes(notes[i]))}board.append(b)}
+const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}
+
+function render() {
+  const board = $('board');
+  const highlightedDigit = activeNumber?.pencil === false ? activeNumber.digit : null;
+  const conflictFreeCounts = Array(10).fill(0);
+  board.innerHTML = '';
+
+  for (let i = 0; i < 81; i++) {
+    const cell = document.createElement('button');
+    const entry = entries[i];
+    const given = puzzle[i] !== '0';
+    cell.className = 'cell';
+    cell.classList.toggle('shade', (Math.floor(i / 27) + Math.floor(i % 9 / 3)) % 2 === 1);
+    cell.classList.toggle('given', given);
+    cell.classList.toggle('boxright', i % 9 === 2 || i % 9 === 5);
+    cell.classList.toggle('boxbottom', Math.floor(i / 9) === 2 || Math.floor(i / 9) === 5);
+    cell.classList.toggle('selected', selected === i);
+    cell.classList.toggle('number-match', entry === highlightedDigit);
+    cell.setAttribute('aria-label', `Row ${Math.floor(i / 9) + 1} column ${i % 9 + 1}, ${entry || 'empty'}`);
+    cell.onclick = () => selectSquare(i);
+
+    if (entry) {
+      cell.textContent = entry;
+      const conflict = entries.some((other, j) => other === entry && peers(i, j));
+      cell.classList.toggle('bad', !given && conflict);
+      if (!conflict) conflictFreeCounts[entry]++;
+    } else if (notes[i].length) {
+      cell.append(renderNotes(notes[i]));
+    }
+    board.append(cell);
+  }
+
   for (const [id, pencil] of [['big', false], ['small', true]]) {
     Array.from($(id).children).forEach((button, index) => {
-      const pressed = activeNumber?.digit === index + 1 && activeNumber.pencil === pencil;
+      const digit = index + 1;
+      const pressed = activeNumber?.digit === digit && activeNumber.pencil === pencil;
       button.classList.toggle('active', pressed);
       button.setAttribute('aria-pressed', String(pressed));
+      if (!pencil) {
+        // Nine conflict-free placements guarantee one in each 3×3 region.
+        button.classList.toggle('completed', conflictFreeCounts[digit] === 9);
+      }
     });
   }
-  $('undo').disabled=!history.length;$('redo').disabled=!future.length;save()}
+  $('undo').disabled = !history.length;
+  $('redo').disabled = !future.length;
+  save();
+}
+
 function renderNotes(marks) {
   const digits = [...marks].sort((a, b) => a - b);
   const group = document.createElement('span');
