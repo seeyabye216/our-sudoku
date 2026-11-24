@@ -1,31 +1,35 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>Our Sudoku — Prototype 1</title><style>
-:root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#243342;background:#f6f7f5}*{box-sizing:border-box}body{margin:0;padding:12px}main{max-width:620px;margin:auto}h1{font-size:23px;margin:6px 0 4px}p{margin:4px 0 12px;color:#526171;font-size:13px}.bar{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}button,select{font:inherit;border:1px solid #b8c5ce;background:white;border-radius:8px;padding:9px 12px;color:#253a4a}button:active{transform:scale(.97)}button.active{background:#1c637c;color:white}button:disabled{opacity:.4}.board{display:grid;grid-template-columns:repeat(9,1fr);width:100%;aspect-ratio:1;border:3px solid #334f61;background:#334f61;gap:1px;touch-action:manipulation}.cell{position:relative;border:0;border-radius:0;padding:0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:clamp(17px,5vw,31px);font-weight:500;min-width:0;min-height:0}.cell.shade{background:#eaf0f2}.cell.given{font-weight:750;color:#263b4c}.cell.selected{background:#f5df9e}.cell.peer:not(.selected){background:#d9e9ec}.cell.same:not(.selected){color:#086d9a}.cell.bad{color:#b3261e!important}.cell.boxright{border-right:2px solid #334f61}.cell.boxbottom{border-bottom:2px solid #334f61}.digits button{padding:10px 0;font-size:20px;font-weight:600}.digits .small{font-size:16px}.label{font-size:12px;font-weight:700;color:#536674;margin:12px 0 0}.status{min-height:24px;font-size:13px;color:#456071}.footer{font-size:12px;color:#647480;margin:16px 0} @media(min-width:600px){.cell{font-size:30px}}
+:root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#243342;background:#f6f7f5}*{box-sizing:border-box}body{margin:0;padding:12px}main{max-width:620px;margin:auto}h1{font-size:23px;margin:6px 0 4px}p{margin:4px 0 12px;color:#526171;font-size:13px}.bar{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}button,select{font:inherit;border:1px solid #b8c5ce;background:white;border-radius:8px;padding:9px 12px;color:#253a4a}button:active{transform:scale(.97)}button.active{background:#1c637c;color:white}button:disabled{opacity:.4}.board{display:grid;grid-template-columns:repeat(9,1fr);width:100%;aspect-ratio:1;border:3px solid #334f61;background:#334f61;gap:1px;touch-action:manipulation}.cell{position:relative;border:0;border-radius:0;padding:0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:clamp(17px,5vw,31px);font-weight:500;min-width:0;min-height:0}.cell.given{font-weight:750;color:#263b4c}.cell.bad{color:#b3261e!important}.cell.boxright{border-right:2px solid #334f61}.cell.boxbottom{border-bottom:2px solid #334f61}.digits button{padding:10px 0;font-size:20px;font-weight:600}.digits .small{font-size:16px}.label{font-size:12px;font-weight:700;color:#536674;margin:12px 0 0}.status{min-height:24px;font-size:13px;color:#456071}.footer{font-size:12px;color:#647480;margin:16px 0} @media(min-width:600px){.cell{font-size:30px}}
 
 .cell { container-type: inline-size; }
+.cell.shade { background: #f1f8fd; }
+.cell.selected { outline: 1px solid #60798a; outline-offset: -2px; }
+.cell.hinted { outline: 2px solid #1c637c; outline-offset: -3px; }
 .notes {
   display: flex;
   flex-direction: column;
   gap: 1px;
   color: #526b7a;
   font-size: 10px;
-  font-size: clamp(10px, 40cqi, 19px);
+  font-size: clamp(10px, 37cqi, 18px);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   line-height: 1;
 }
 .notes[data-rows="2"] {
   font-size: 9px;
-  font-size: clamp(9px, 34cqi, 17px);
+  font-size: clamp(9px, 32cqi, 16px);
 }
 .notes[data-rows="3"] {
   font-size: 8px;
-  font-size: min(29cqi, 16px);
+  font-size: clamp(8px, 27cqi, 15px);
 }
 .note-row {
   display: flex;
   justify-content: center;
   gap: 0.2em;
 }
+.note-row > span { transform: scaleX(0.94); }
 
 body {
   padding: 12px;
@@ -105,7 +109,7 @@ function valid(p,s){if(p.length!==81||s.length!==81)return false;for(let i=0;i<8
 const pool=Object.fromEntries(Object.entries(puzzles).map(([k,v])=>[k,v.filter(([p,s])=>valid(p,s))]));let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';
 let activeNumber = null;
 let squareFirst = false;
-const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}function render(){let board=$('board');board.innerHTML='';for(let i=0;i<81;i++){let b=document.createElement('button');b.className='cell'+((Math.floor(i/27)+Math.floor(i%9/3))%2?' shade':'')+(puzzle[i]!=='0'?' given':'')+(i%9===2||i%9===5?' boxright':'')+(Math.floor(i/9)===2||Math.floor(i/9)===5?' boxbottom':'')+(selected===i?' selected':peers(selected,i)?' peer':'')+(entries[i]&&entries[i]===entries[selected]&&i!==selected?' same':'');b.setAttribute('aria-label',`Row ${Math.floor(i/9)+1} column ${i%9+1}, ${entries[i]||'empty'}`);b.onclick=()=>selectSquare(i);if(entries[i]){b.textContent=entries[i];if(puzzle[i]==='0'&&entries.some((x,j)=>x===entries[i]&&peers(i,j)))b.classList.add('bad')}else if(notes[i].length){b.append(renderNotes(notes[i]))}board.append(b)}
+const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}function render(){let board=$('board');board.innerHTML='';for(let i=0;i<81;i++){let b=document.createElement('button');b.className='cell'+((Math.floor(i/27)+Math.floor(i%9/3))%2?' shade':'')+(puzzle[i]!=='0'?' given':'')+(i%9===2||i%9===5?' boxright':'')+(Math.floor(i/9)===2||Math.floor(i/9)===5?' boxbottom':'')+(selected===i?' selected':'');b.setAttribute('aria-label',`Row ${Math.floor(i/9)+1} column ${i%9+1}, ${entries[i]||'empty'}`);b.onclick=()=>selectSquare(i);if(entries[i]){b.textContent=entries[i];if(puzzle[i]==='0'&&entries.some((x,j)=>x===entries[i]&&peers(i,j)))b.classList.add('bad')}else if(notes[i].length){b.append(renderNotes(notes[i]))}board.append(b)}
   for (const [id, pencil] of [['big', false], ['small', true]]) {
     Array.from($(id).children).forEach((button, index) => {
       const pressed = activeNumber?.digit === index + 1 && activeNumber.pencil === pencil;
@@ -199,6 +203,6 @@ for (const [id, pencil] of [['big', false], ['small', true]]) {
     $(id).append(button);
   }
 }
-$('new').onclick=()=>start($('difficulty').value,Math.floor(Math.random()*pool[$('difficulty').value].length));$('difficulty').onchange=()=>start($('difficulty').value);$('reset').onclick=()=>{if(confirm('Restart this puzzle and clear your entries?'))start(difficulty,pool[difficulty].findIndex(x=>x[0]===puzzle))};$('erase').onclick=()=>{if(puzzle[selected]!=='0')return;commit();entries[selected]=0;notes[selected]=[];render()};$('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());let s=history.pop();entries=s.entries;notes=s.notes;render()};$('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());let s=future.pop();entries=s.entries;notes=s.notes;render()};$('candidates').onclick=()=>{commit();for(let i=0;i<81;i++)if(!entries[i])notes[i]=candidates(i);render();$('status').textContent='Pencil marks filled for empty squares.'};$('hint').onclick=()=>{let i=entries.findIndex((x,j)=>!x&&candidates(j).length===1);if(i<0){$('status').textContent='No naked single found. More advanced teaching hints are coming later.';return}selected=i;squareFirst=true;render();$('status').textContent=`Look at row ${Math.floor(i/9)+1}, column ${i%9+1}: only ${candidates(i)[0]} is possible here, based on the numbers already placed.`};$('check').onclick=()=>{let bad=entries.filter((x,i)=>x&&x!==Number(solution[i])).length;$('status').textContent=bad?`${bad} filled square(s) differ from the solution.`:'All filled numbers match the solution so far.'};
+$('new').onclick=()=>start($('difficulty').value,Math.floor(Math.random()*pool[$('difficulty').value].length));$('difficulty').onchange=()=>start($('difficulty').value);$('reset').onclick=()=>{if(confirm('Restart this puzzle and clear your entries?'))start(difficulty,pool[difficulty].findIndex(x=>x[0]===puzzle))};$('erase').onclick=()=>{if(puzzle[selected]!=='0')return;commit();entries[selected]=0;notes[selected]=[];render()};$('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());let s=history.pop();entries=s.entries;notes=s.notes;render()};$('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());let s=future.pop();entries=s.entries;notes=s.notes;render()};$('candidates').onclick=()=>{commit();for(let i=0;i<81;i++)if(!entries[i])notes[i]=candidates(i);render();$('status').textContent='Pencil marks filled for empty squares.'};$('hint').onclick=()=>{let i=entries.findIndex((x,j)=>!x&&candidates(j).length===1);if(i<0){$('status').textContent='No naked single found. More advanced teaching hints are coming later.';return}selected=i;squareFirst=true;render();$('board').children[i].classList.add('hinted');$('status').textContent=`Look at row ${Math.floor(i/9)+1}, column ${i%9+1}: only ${candidates(i)[0]} is possible here, based on the numbers already placed.`};$('check').onclick=()=>{let bad=entries.filter((x,i)=>x&&x!==Number(solution[i])).length;$('status').textContent=bad?`${bad} filled square(s) differ from the solution.`:'All filled numbers match the solution so far.'};
 try{let saved=JSON.parse(localStorage.getItem('our-sudoku-v1'));if(saved&&pool[saved.difficulty]?.some(x=>x[0]===saved.puzzle)&&saved.entries?.length===81&&saved.notes?.length===81){({puzzle,solution,entries,notes,difficulty}=saved);selected=entries.findIndex(x=>!x);if(selected<0)selected=0;$('difficulty').value=difficulty;render()}else start('moderate')}catch(e){start('moderate')}
 </script></body></html>
