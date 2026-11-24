@@ -55,10 +55,36 @@ header, .bar, .controls { min-width: 0; }
 .bar { align-items: center; }
 .bar label { display: flex; align-items: center; gap: 8px; }
 button, select { min-height: 44px; touch-action: manipulation; }
-.board {
-  grid-template-rows: repeat(9, minmax(0, 1fr));
+.board { grid-template-rows: repeat(9, minmax(0, 1fr)); }
+.board-area {
+  position: relative;
+  width: 100%;
   max-width: 620px;
   margin-inline: auto;
+}
+.solved-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  height: max-content;
+  margin: auto;
+  padding: 20px 26px;
+  border: 1px solid #d4dfe3;
+  border-radius: 12px;
+  background: white;
+  color: #243342;
+  box-shadow: 0 5px 18px #24334240;
+  text-align: center;
+}
+.solved-dialog h2 { margin: 0 0 14px; font-size: 24px; }
+.solved-dialog button {
+  min-width: 76px;
+  border-color: #24754b;
+  background: #24754b;
+  color: white;
+  font-weight: 700;
 }
 .controls { max-width: 620px; margin-inline: auto; }
 .number-pads {
@@ -93,7 +119,7 @@ button, select { min-height: 44px; touch-action: manipulation; }
   .bar { grid-column: 2; grid-row: 2; margin: 0; }
   .bar label { width: 100%; }
   .bar select, .bar button { flex: 1; }
-  .board {
+  .board-area {
     grid-column: 1;
     grid-row: 2 / 4;
     width: min(100%, calc(100vh - 110px));
@@ -107,7 +133,13 @@ button, select { min-height: 44px; touch-action: manipulation; }
   .bar { gap: 6px; }
   .bar button { padding-inline: 8px; }
 }
-</style></head><body><main><header><h1>Our Sudoku <span style="font-size:13px;font-weight:400">Prototype 1</span></h1><p>A first playable version for your iPad. No account or installation required.</p></header><div class="bar"><label>Difficulty <select id="difficulty"><option value="easy">Easy</option><option value="moderate" selected>Moderate</option><option value="difficult">Difficult</option></select></label><button id="new">New puzzle</button><button id="reset">Restart puzzle</button></div><div id="board" class="board" role="grid" aria-label="Sudoku board"></div><section class="controls" aria-label="Game controls"><div class="number-pads">
+</style></head><body><main><header><h1>Our Sudoku <span style="font-size:13px;font-weight:400">Prototype 1</span></h1><p>A first playable version for your iPad. No account or installation required.</p></header><div class="bar"><label>Difficulty <select id="difficulty"><option value="easy">Easy</option><option value="moderate" selected>Moderate</option><option value="difficult">Difficult</option></select></label><button id="new">New puzzle</button><button id="reset">Restart puzzle</button></div><div class="board-area">
+  <div id="board" class="board" role="grid" aria-label="Sudoku board"></div>
+  <dialog id="solved-dialog" class="solved-dialog" aria-labelledby="solved-title">
+    <h2 id="solved-title">Puzzle solved!</h2>
+    <button id="solved-ok" type="button" autofocus>OK</button>
+  </dialog>
+</div><section class="controls" aria-label="Game controls"><div class="number-pads">
   <div role="group" aria-labelledby="pencil-label">
     <div class="label" id="pencil-label">Pencil marks</div>
     <div class="digits" id="small"></div>
@@ -123,7 +155,16 @@ function valid(p,s){if(p.length!==81||s.length!==81)return false;for(let i=0;i<8
 const pool=Object.fromEntries(Object.entries(puzzles).map(([k,v])=>[k,v.filter(([p,s])=>valid(p,s))]));let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';
 let activeNumber = null;
 let squareFirst = false;
-const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}function save(){try{localStorage.setItem('our-sudoku-v1',JSON.stringify({puzzle,solution,entries,notes,difficulty}))}catch(e){}}function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}
+let completionAcknowledged = false;
+const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}
+function save() {
+  const state = {puzzle, solution, entries, notes, difficulty};
+  if (completionAcknowledged) state.completionAcknowledged = true;
+  try {
+    localStorage.setItem('our-sudoku-v1', JSON.stringify(state));
+  } catch (error) {}
+}
+function commit(){history.push(snapshot());if(history.length>150)history.shift();future=[]}function candidates(i){if(entries[i])return [];let used=new Set(entries.filter((x,j)=>x&&peers(i,j)));return [1,2,3,4,5,6,7,8,9].filter(n=>!used.has(n))}
 
 function render() {
   const board = $('board');
@@ -170,8 +211,27 @@ function render() {
   }
   $('undo').disabled = !history.length;
   $('redo').disabled = !future.length;
+  updateCompletion();
   save();
 }
+
+function updateCompletion() {
+  const dialog = $('solved-dialog');
+  const solved = entries.every((value, i) => value === Number(solution[i]));
+  if (!solved) {
+    completionAcknowledged = false;
+    if (dialog.open) dialog.close();
+  } else if (!completionAcknowledged && !dialog.open) {
+    dialog.show();
+  }
+}
+
+$('solved-ok').onclick = () => {
+  completionAcknowledged = true;
+  $('solved-dialog').close();
+  $('board').children[selected]?.focus({preventScroll: true});
+  save();
+};
 
 function renderNotes(marks) {
   const digits = [...marks].sort((a, b) => a - b);
@@ -230,9 +290,7 @@ function input({digit, pencil}, replace = false) {
       if (peers(i, selected)) notes[i] = notes[i].filter(mark => mark !== digit);
     }
   }
-  $('status').textContent = entries.every((value, i) => value === Number(solution[i]))
-    ? 'Puzzle solved! Well done!'
-    : '';
+  $('status').textContent = '';
 }
 
 function selectNumber(digit, pencil) {
@@ -246,7 +304,7 @@ function selectNumber(digit, pencil) {
   render();
 }
 
-function start(level,idx=0){let a=pool[level];if(!a?.length){$('status').textContent='This difficulty is temporarily unavailable.';return}difficulty=level;[puzzle,solution]=a[idx%a.length];entries=[...puzzle].map(Number);notes=Array.from({length:81},()=>[]);selected=entries.findIndex(x=>!x);history=[];future=[];squareFirst=false;$('difficulty').value=level;$('status').textContent='New puzzle ready. Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.';render()}
+function start(level,idx=0){let a=pool[level];if(!a?.length){$('status').textContent='This difficulty is temporarily unavailable.';return}difficulty=level;[puzzle,solution]=a[idx%a.length];entries=[...puzzle].map(Number);notes=Array.from({length:81},()=>[]);selected=entries.findIndex(x=>!x);history=[];future=[];squareFirst=false;completionAcknowledged=false;$('difficulty').value=level;$('status').textContent='New puzzle ready. Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.';render()}
 
 for (const [id, pencil] of [['big', false], ['small', true]]) {
   for (let digit = 1; digit <= 9; digit++) {
@@ -260,5 +318,5 @@ for (const [id, pencil] of [['big', false], ['small', true]]) {
   }
 }
 $('new').onclick=()=>start($('difficulty').value,Math.floor(Math.random()*pool[$('difficulty').value].length));$('difficulty').onchange=()=>start($('difficulty').value);$('reset').onclick=()=>{if(confirm('Restart this puzzle and clear your entries?'))start(difficulty,pool[difficulty].findIndex(x=>x[0]===puzzle))};$('erase').onclick=()=>{if(puzzle[selected]!=='0')return;commit();entries[selected]=0;notes[selected]=[];render()};$('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());let s=history.pop();entries=s.entries;notes=s.notes;render()};$('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());let s=future.pop();entries=s.entries;notes=s.notes;render()};$('candidates').onclick=()=>{commit();for(let i=0;i<81;i++)if(!entries[i])notes[i]=candidates(i);render();$('status').textContent='Pencil marks filled for empty squares.'};$('hint').onclick=()=>{let i=entries.findIndex((x,j)=>!x&&candidates(j).length===1);if(i<0){$('status').textContent='No naked single found. More advanced teaching hints are coming later.';return}selected=i;squareFirst=true;render();$('board').children[i].classList.add('hinted');$('status').textContent=`Look at row ${Math.floor(i/9)+1}, column ${i%9+1}: only ${candidates(i)[0]} is possible here, based on the numbers already placed.`};$('check').onclick=()=>{let bad=entries.filter((x,i)=>x&&x!==Number(solution[i])).length;$('status').textContent=bad?`${bad} filled square(s) differ from the solution.`:'All filled numbers match the solution so far.'};
-try{let saved=JSON.parse(localStorage.getItem('our-sudoku-v1'));if(saved&&pool[saved.difficulty]?.some(x=>x[0]===saved.puzzle)&&saved.entries?.length===81&&saved.notes?.length===81){({puzzle,solution,entries,notes,difficulty}=saved);selected=entries.findIndex(x=>!x);if(selected<0)selected=0;$('difficulty').value=difficulty;render()}else start('moderate')}catch(e){start('moderate')}
+try{let saved=JSON.parse(localStorage.getItem('our-sudoku-v1'));if(saved&&pool[saved.difficulty]?.some(x=>x[0]===saved.puzzle)&&saved.entries?.length===81&&saved.notes?.length===81){({puzzle,solution,entries,notes,difficulty}=saved);completionAcknowledged=saved.completionAcknowledged===true;selected=entries.findIndex(x=>!x);if(selected<0)selected=0;$('difficulty').value=difficulty;render()}else start('moderate')}catch(e){start('moderate')}
 </script></body></html>
