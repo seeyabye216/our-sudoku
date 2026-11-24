@@ -15,13 +15,20 @@
 .notes {
   display: flex;
   flex-direction: column;
-  gap: 1px;
   color: #526b7a;
   font-size: 8.5px;
   font-size: clamp(8.5px, 31.45cqi, 15.3px);
   font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1;
+}
+.notes[data-count="1"] {
+  font-size: 13px;
+  font-size: min(0.78em, clamp(11px, 48cqi, 21px));
+}
+.notes[data-count="2"] {
+  font-size: 11px;
+  font-size: min(0.69em, clamp(9.5px, 40cqi, 18px));
 }
 .notes[data-rows="2"] {
   font-size: 8px;
@@ -34,7 +41,7 @@
 .note-row {
   display: flex;
   justify-content: center;
-  gap: 0.2em;
+  gap: 0.05em;
 }
 .note-row > span { transform: scaleX(0.94); }
 
@@ -172,6 +179,7 @@ function renderNotes(marks) {
   group.className = 'notes';
   const rowCount = Math.ceil(digits.length / 3);
   group.dataset.rows = rowCount;
+  group.dataset.count = digits.length;
 
   let offset = 0;
   for (let rowsLeft = rowCount; rowsLeft > 0; rowsLeft--) {
