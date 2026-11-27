@@ -149,14 +149,95 @@ button, select { min-height: 44px; touch-action: manipulation; }
     <div class="digits" id="big"></div>
   </div>
 </div><div class="actions"><button id="erase">Erase</button><button id="undo">Undo</button><button id="redo">Redo</button><button id="candidates">Fill pencil marks</button><button id="hint">Hint</button><button id="check">Check</button></div><div class="status" id="status" aria-live="polite">Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.</div><div class="footer">Pencil marks are optional. Entering a large number automatically erases affected pencil marks. Progress is saved in this browser on this device. This is a prototype, not the final game.</div></section></main><script>
-const puzzles={easy:[['530070000600195000098000060800060003400803001700020006060000280000419005000080079','534678912672195348198342567859761423426853791713924856961537284287419635345286179'],['000260701680070090190004500820100040004602900050003028009300074040050036703018000','435269781682571493197834562826195347374682915951743628519326874248957136763418259']],moderate:[['030678900000105048090302007859700000000853090003004000900530080000419030045006109','534678912672195348198342567859761423426853791713924856961537284287419635345286179'],['504000900070000040098000000850761420400803091003900806000007000087400600340006000','534678912672195348198342567859761423426853791713924856961537284287419635345286179']],difficult:[['000070010002190300100000500000000020026050090710904050901030200000019005000000109','534678912672195348198342567859761423426853791713924856961537284287419635345286179']]};
-// Validate puzzles before enabling a game; omit any accidentally mistyped source puzzle.
-function valid(p,s){if(p.length!==81||s.length!==81)return false;for(let i=0;i<81;i++)if(p[i]!=='0'&&p[i]!==s[i])return false;for(let k=0;k<9;k++){for(let indices of [Array.from({length:9},(_,j)=>k*9+j),Array.from({length:9},(_,j)=>j*9+k),Array.from({length:9},(_,j)=>Math.floor(k/3)*27+(k%3)*3+Math.floor(j/3)*9+j%3)])if(new Set(indices.map(i=>s[i])).size!==9)return false}return true}
-const pool=Object.fromEntries(Object.entries(puzzles).map(([k,v])=>[k,v.filter(([p,s])=>valid(p,s))]));let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';
+const puzzles = {
+  easy: [
+    ['530070000600195000098000060800060003400803001700020006060000280000419005000080079',
+     '534678912672195348198342567859761423426853791713924856961537284287419635345286179'],
+    ['000260701680070090190004500820100040004602900050003028009300074040050036703018000',
+     '435269781682571493197834562826195347374682915951743628519326874248957136763418259'],
+  ],
+  moderate: [
+    ['080034160700609004610005000091306000000098010308002007076080500040000789009547000',
+     '982734165735619824614825973491376258257498316368152497176983542543261789829547631'],
+    ['070020306006938001000000052080200407400080000200360000009872600600000070008005003',
+     '874521396526938741931746852183259467465187239297364185359872614612493578748615923'],
+  ],
+  difficult: [
+    ['010007400083200050000000000794060030000001000000005096402900000008504010000006200',
+     '915687423683249157247153968794862531536791842821435796462918375378524619159376284'],
+  ],
+};
+
+// Retired grids are available only when restoring or restarting an existing game.
+const legacyPuzzles = {
+  moderate: [
+    ['030678900000105048090302007859700000000853090003004000900530080000419030045006109',
+     '534678912672195348198342567859761423426853791713924856961537284287419635345286179'],
+    ['504000900070000040098000000850761420400803091003900806000007000087400600340006000',
+     '534678912672195348198342567859761423426853791713924856961537284287419635345286179'],
+  ],
+  difficult: [
+    ['000070010002190300100000500000000020026050090710904050901030200000019005000000109',
+     '534678912672195348198342567859761423426853791713924856961537284287419635345286179'],
+  ],
+};
+
+const peerIndices = Array.from({length: 81}, (_, index) =>
+  Array.from({length: 81}, (_, other) => other).filter(other => peers(index, other)));
+const pool = Object.fromEntries(Object.entries(puzzles).map(([level, records]) =>
+  [level, records.filter(([clues, answer]) => isSolved(clues, Array.from(answer, Number)) &&
+    countSolutions(Array.from(clues, Number), 2) === 1)]));
+
+let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';
 let activeNumber = null;
 let squareFirst = false;
 let completionAcknowledged = false;
 const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}
+function obeysRules(clues, grid) {
+  return /^[0-9]{81}$/.test(clues) && grid.length === 81 && grid.every((digit, index) =>
+    Number.isInteger(digit) && digit >= 0 && digit <= 9 &&
+    (clues[index] === '0' || digit === Number(clues[index])) &&
+    (!digit || peerIndices[index].every(other => grid[other] !== digit)));
+}
+
+function isSolved(clues, grid) {
+  return grid.every(digit => digit !== 0) && obeysRules(clues, grid);
+}
+
+// Used to verify uniqueness (limit 2) and to check for a possible completion (limit 1).
+function countSolutions(grid, limit = 1) {
+  const working = [...grid];
+  function search(remaining) {
+    let cell = -1;
+    let options;
+    for (let index = 0; index < working.length; index++) {
+      if (working[index]) continue;
+      let used = 0;
+      for (const peer of peerIndices[index]) used |= 1 << working[peer];
+      const available = [];
+      for (let digit = 1; digit <= 9; digit++) {
+        if (!(used & (1 << digit))) available.push(digit);
+      }
+      if (!available.length) return 0;
+      if (cell === -1 || available.length < options.length) {
+        cell = index;
+        options = available;
+        if (available.length === 1) break;
+      }
+    }
+    if (cell === -1) return 1;
+    let count = 0;
+    for (const digit of options) {
+      working[cell] = digit;
+      count += search(remaining - count);
+      if (count >= remaining) break;
+    }
+    working[cell] = 0;
+    return count;
+  }
+  return search(limit);
+}
+
 function save() {
   const state = {puzzle, solution, entries, notes, difficulty};
   if (completionAcknowledged) state.completionAcknowledged = true;
@@ -217,7 +298,7 @@ function render() {
 
 function updateCompletion() {
   const dialog = $('solved-dialog');
-  const solved = entries.every((value, i) => value === Number(solution[i]));
+  const solved = isSolved(puzzle, entries);
   if (!solved) {
     completionAcknowledged = false;
     if (dialog.open) dialog.close();
@@ -304,7 +385,24 @@ function selectNumber(digit, pencil) {
   render();
 }
 
-function start(level,idx=0){let a=pool[level];if(!a?.length){$('status').textContent='This difficulty is temporarily unavailable.';return}difficulty=level;[puzzle,solution]=a[idx%a.length];entries=[...puzzle].map(Number);notes=Array.from({length:81},()=>[]);selected=entries.findIndex(x=>!x);history=[];future=[];squareFirst=false;completionAcknowledged=false;$('difficulty').value=level;$('status').textContent='New puzzle ready. Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.';render()}
+function start(level, record = pool[level]?.[0]) {
+  if (!record) {
+    $('status').textContent = 'This difficulty is temporarily unavailable.';
+    return;
+  }
+  difficulty = level;
+  [puzzle, solution] = record;
+  entries = Array.from(puzzle, Number);
+  notes = Array.from({length: 81}, () => []);
+  selected = entries.findIndex(digit => !digit);
+  history = [];
+  future = [];
+  squareFirst = false;
+  completionAcknowledged = false;
+  $('difficulty').value = level;
+  $('status').textContent = 'New puzzle ready. Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.';
+  render();
+}
 
 for (const [id, pencil] of [['big', false], ['small', true]]) {
   for (let digit = 1; digit <= 9; digit++) {
@@ -317,6 +415,53 @@ for (const [id, pencil] of [['big', false], ['small', true]]) {
     $(id).append(button);
   }
 }
-$('new').onclick=()=>start($('difficulty').value,Math.floor(Math.random()*pool[$('difficulty').value].length));$('difficulty').onchange=()=>start($('difficulty').value);$('reset').onclick=()=>{if(confirm('Restart this puzzle and clear your entries?'))start(difficulty,pool[difficulty].findIndex(x=>x[0]===puzzle))};$('erase').onclick=()=>{if(puzzle[selected]!=='0')return;commit();entries[selected]=0;notes[selected]=[];render()};$('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());let s=history.pop();entries=s.entries;notes=s.notes;render()};$('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());let s=future.pop();entries=s.entries;notes=s.notes;render()};$('candidates').onclick=()=>{commit();for(let i=0;i<81;i++)if(!entries[i])notes[i]=candidates(i);render();$('status').textContent='Pencil marks filled for empty squares.'};$('hint').onclick=()=>{let i=entries.findIndex((x,j)=>!x&&candidates(j).length===1);if(i<0){$('status').textContent='No naked single found. More advanced teaching hints are coming later.';return}selected=i;squareFirst=true;render();$('board').children[i].classList.add('hinted');$('status').textContent=`Look at row ${Math.floor(i/9)+1}, column ${i%9+1}: only ${candidates(i)[0]} is possible here, based on the numbers already placed.`};$('check').onclick=()=>{let bad=entries.filter((x,i)=>x&&x!==Number(solution[i])).length;$('status').textContent=bad?`${bad} filled square(s) differ from the solution.`:'All filled numbers match the solution so far.'};
-try{let saved=JSON.parse(localStorage.getItem('our-sudoku-v1'));if(saved&&pool[saved.difficulty]?.some(x=>x[0]===saved.puzzle)&&saved.entries?.length===81&&saved.notes?.length===81){({puzzle,solution,entries,notes,difficulty}=saved);completionAcknowledged=saved.completionAcknowledged===true;selected=entries.findIndex(x=>!x);if(selected<0)selected=0;$('difficulty').value=difficulty;render()}else start('moderate')}catch(e){start('moderate')}
+$('new').onclick = () => {
+  const level = $('difficulty').value;
+  const records = pool[level];
+  start(level, records[Math.floor(Math.random() * records.length)]);
+};
+$('difficulty').onchange = () => start($('difficulty').value);
+$('reset').onclick = () => {
+  if (confirm('Restart this puzzle and clear your entries?')) start(difficulty, [puzzle, solution]);
+};
+$('erase').onclick=()=>{if(puzzle[selected]!=='0')return;commit();entries[selected]=0;notes[selected]=[];render()};$('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());let s=history.pop();entries=s.entries;notes=s.notes;render()};$('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());let s=future.pop();entries=s.entries;notes=s.notes;render()};$('candidates').onclick=()=>{commit();for(let i=0;i<81;i++)if(!entries[i])notes[i]=candidates(i);render();$('status').textContent='Pencil marks filled for empty squares.'};$('hint').onclick=()=>{let i=entries.findIndex((x,j)=>!x&&candidates(j).length===1);if(i<0){$('status').textContent='No naked single found. More advanced teaching hints are coming later.';return}selected=i;squareFirst=true;render();$('board').children[i].classList.add('hinted');$('status').textContent=`Look at row ${Math.floor(i/9)+1}, column ${i%9+1}: only ${candidates(i)[0]} is possible here, based on the numbers already placed.`};
+$('check').onclick = () => {
+  if (!obeysRules(puzzle, entries)) {
+    $('status').textContent = 'Check the conflicting numbers. A digit may appear only once per row, column, and box.';
+  } else if (!entries.includes(0)) {
+    $('status').textContent = 'This grid is a valid solution.';
+  } else if (countSolutions(entries)) {
+    $('status').textContent = 'The current entries can be completed.';
+  } else {
+    $('status').textContent = 'There is no valid completion with these entries. Review your recent moves.';
+  }
+};
+
+function restoreGame(saved) {
+  const records = Object.hasOwn(pool, saved?.difficulty) ? pool[saved.difficulty] : [];
+  const retired = Object.hasOwn(legacyPuzzles, saved?.difficulty) ? legacyPuzzles[saved.difficulty] : [];
+  const record = [...records, ...retired].find(([clues]) => clues === saved?.puzzle);
+  if (!record || !Array.isArray(saved.entries) || saved.entries.length !== 81 ||
+      !Array.isArray(saved.notes) || saved.notes.length !== 81) return false;
+
+  [puzzle, solution] = record;
+  difficulty = saved.difficulty;
+  entries = saved.entries.map((digit, index) =>
+    Number(puzzle[index]) || (Number.isInteger(digit) && digit >= 1 && digit <= 9 ? digit : 0));
+  notes = saved.notes.map((marks, index) => !entries[index] && Array.isArray(marks)
+    ? marks.filter(digit => Number.isInteger(digit) && digit >= 1 && digit <= 9) : []);
+  completionAcknowledged = saved.completionAcknowledged === true &&
+    entries.every((digit, index) => digit === saved.entries[index]);
+  selected = entries.findIndex(digit => !digit);
+  if (selected < 0) selected = 0;
+  $('difficulty').value = difficulty;
+  render();
+  return true;
+}
+
+let savedGame;
+try {
+  savedGame = JSON.parse(localStorage.getItem('our-sudoku-v1'));
+} catch (error) {}
+if (!restoreGame(savedGame)) start('moderate');
 </script></body></html>
