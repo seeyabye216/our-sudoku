@@ -148,7 +148,7 @@ button, select { min-height: 44px; touch-action: manipulation; }
     <div class="label" id="final-label">Final numbers</div>
     <div class="digits" id="big"></div>
   </div>
-</div><div class="actions"><button id="erase">Erase</button><button id="undo">Undo</button><button id="redo">Redo</button><button id="candidates">Fill pencil marks</button><button id="hint">Hint</button><button id="check">Check</button></div><div class="status" id="status" aria-live="polite">Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.</div><div class="footer">Pencil marks are optional. Entering a large number automatically erases affected pencil marks. Progress is saved in this browser on this device. This is a prototype, not the final game.</div></section></main><script>
+</div><div class="actions"><button id="erase">Erase</button><button id="undo">Undo</button><button id="redo">Redo</button><button id="candidates">Fill pencil marks</button><button id="hint">Hint</button><button id="check">Check</button></div><div class="status" id="status" aria-live="polite">Tap a square first, or select a number to use it on multiple squares. Tap the highlighted number again to clear it.</div><div class="footer">Pencil marks are optional. Entering a large number automatically erases affected pencil marks. Progress is saved in this browser on this device. This is a prototype, not the final game.</div></section></main><script src="sudoku-generator.js"></script><script>
 const puzzles = {
   easy: [
     ['530070000600195000098000060800060003400803001700020006060000280000419005000080079',
@@ -186,12 +186,18 @@ const peerIndices = Array.from({length: 81}, (_, index) =>
   Array.from({length: 81}, (_, other) => other).filter(other => peers(index, other)));
 const pool = Object.fromEntries(Object.entries(puzzles).map(([level, records]) =>
   [level, records.filter(([clues, answer]) => isSolved(clues, Array.from(answer, Number)) &&
-    countSolutions(Array.from(clues, Number), 2) === 1)]));
+    SudokuGenerator.search(Array.from(clues, Number), 2).count === 1)]));
 
 let puzzle='',solution='',entries=[],notes=[],selected=0,history=[],future=[],difficulty='moderate';
 let activeNumber = null;
 let squareFirst = false;
 let completionAcknowledged = false;
+let generated = false;
+let generationRequest = 0;
+const playedKey = 'our-sudoku-played-v1';
+const playedPuzzles = new Set([...Object.values(puzzles).flat(), ...Object.values(legacyPuzzles).flat()]
+  .map(([clues]) => clues));
+
 const $=id=>document.getElementById(id);function peers(i,j){return i!==j&&(Math.floor(i/9)===Math.floor(j/9)||i%9===j%9||(Math.floor(i/27)===Math.floor(j/27)&&Math.floor(i%9/3)===Math.floor(j%9/3)))}function snapshot(){return {entries:[...entries],notes:notes.map(n=>[...n])}}
 function obeysRules(clues, grid) {
   return /^[0-9]{81}$/.test(clues) && grid.length === 81 && grid.every((digit, index) =>
@@ -204,43 +210,30 @@ function isSolved(clues, grid) {
   return grid.every(digit => digit !== 0) && obeysRules(clues, grid);
 }
 
-// Used to verify uniqueness (limit 2) and to check for a possible completion (limit 1).
-function countSolutions(grid, limit = 1) {
-  const working = [...grid];
-  function search(remaining) {
-    let cell = -1;
-    let options;
-    for (let index = 0; index < working.length; index++) {
-      if (working[index]) continue;
-      let used = 0;
-      for (const peer of peerIndices[index]) used |= 1 << working[peer];
-      const available = [];
-      for (let digit = 1; digit <= 9; digit++) {
-        if (!(used & (1 << digit))) available.push(digit);
-      }
-      if (!available.length) return 0;
-      if (cell === -1 || available.length < options.length) {
-        cell = index;
-        options = available;
-        if (available.length === 1) break;
+function refreshPlayedPuzzles() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(playedKey));
+    if (Array.isArray(stored)) {
+      for (const clues of stored) {
+        if (typeof clues === 'string' && /^[0-9]{81}$/.test(clues)) playedPuzzles.add(clues);
       }
     }
-    if (cell === -1) return 1;
-    let count = 0;
-    for (const digit of options) {
-      working[cell] = digit;
-      count += search(remaining - count);
-      if (count >= remaining) break;
-    }
-    working[cell] = 0;
-    return count;
-  }
-  return search(limit);
+  } catch (error) {}
+}
+
+function rememberPuzzle(clues) {
+  refreshPlayedPuzzles();
+  if (playedPuzzles.has(clues)) return;
+  playedPuzzles.add(clues);
+  try {
+    localStorage.setItem(playedKey, JSON.stringify([...playedPuzzles]));
+  } catch (error) {}
 }
 
 function save() {
   const state = {puzzle, solution, entries, notes, difficulty};
   if (completionAcknowledged) state.completionAcknowledged = true;
+  if (generated) state.generated = true;
   try {
     localStorage.setItem('our-sudoku-v1', JSON.stringify(state));
   } catch (error) {}
@@ -385,13 +378,15 @@ function selectNumber(digit, pencil) {
   render();
 }
 
-function start(level, record = pool[level]?.[0]) {
+function start(level, record, isGenerated = false) {
   if (!record) {
     $('status').textContent = 'This difficulty is temporarily unavailable.';
     return;
   }
   difficulty = level;
+  generated = isGenerated;
   [puzzle, solution] = record;
+  if (generated) rememberPuzzle(puzzle);
   entries = Array.from(puzzle, Number);
   notes = Array.from({length: 81}, () => []);
   selected = entries.findIndex(digit => !digit);
@@ -415,14 +410,32 @@ for (const [id, pencil] of [['big', false], ['small', true]]) {
     $(id).append(button);
   }
 }
-$('new').onclick = () => {
+async function requestPuzzle() {
   const level = $('difficulty').value;
-  const records = pool[level];
-  start(level, records[Math.floor(Math.random() * records.length)]);
-};
-$('difficulty').onchange = () => start($('difficulty').value);
+  const request = ++generationRequest;
+  $('status').textContent = 'Generating a new puzzle…';
+  for (let attempt = 0; attempt < SudokuGenerator.maxAttempts; attempt++) {
+    // Yield between attempts so the browser can paint and accept another selection.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (request !== generationRequest) return;
+    refreshPlayedPuzzles();
+    const record = SudokuGenerator.generate(level, playedPuzzles, {attempts: 1});
+    if (record) {
+      start(level, record, true);
+      return;
+    }
+  }
+  $('difficulty').value = difficulty;
+  $('status').textContent = 'Could not generate a new puzzle at that difficulty. Your current puzzle was kept. Try again.';
+}
+
+$('new').onclick = requestPuzzle;
+$('difficulty').onchange = requestPuzzle;
 $('reset').onclick = () => {
-  if (confirm('Restart this puzzle and clear your entries?')) start(difficulty, [puzzle, solution]);
+  if (confirm('Restart this puzzle and clear your entries?')) {
+    generationRequest++;
+    start(difficulty, [puzzle, solution], generated);
+  }
 };
 $('erase').onclick=()=>{if(puzzle[selected]!=='0')return;commit();entries[selected]=0;notes[selected]=[];render()};$('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());let s=history.pop();entries=s.entries;notes=s.notes;render()};$('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());let s=future.pop();entries=s.entries;notes=s.notes;render()};$('candidates').onclick=()=>{commit();for(let i=0;i<81;i++)if(!entries[i])notes[i]=candidates(i);render();$('status').textContent='Pencil marks filled for empty squares.'};$('hint').onclick=()=>{let i=entries.findIndex((x,j)=>!x&&candidates(j).length===1);if(i<0){$('status').textContent='No naked single found. More advanced teaching hints are coming later.';return}selected=i;squareFirst=true;render();$('board').children[i].classList.add('hinted');$('status').textContent=`Look at row ${Math.floor(i/9)+1}, column ${i%9+1}: only ${candidates(i)[0]} is possible here, based on the numbers already placed.`};
 $('check').onclick = () => {
@@ -430,7 +443,7 @@ $('check').onclick = () => {
     $('status').textContent = 'Check the conflicting numbers. A digit may appear only once per row, column, and box.';
   } else if (!entries.includes(0)) {
     $('status').textContent = 'This grid is a valid solution.';
-  } else if (countSolutions(entries)) {
+  } else if (SudokuGenerator.search(entries).count) {
     $('status').textContent = 'The current entries can be completed.';
   } else {
     $('status').textContent = 'There is no valid completion with these entries. Review your recent moves.';
@@ -438,14 +451,25 @@ $('check').onclick = () => {
 };
 
 function restoreGame(saved) {
-  const records = Object.hasOwn(pool, saved?.difficulty) ? pool[saved.difficulty] : [];
-  const retired = Object.hasOwn(legacyPuzzles, saved?.difficulty) ? legacyPuzzles[saved.difficulty] : [];
-  const record = [...records, ...retired].find(([clues]) => clues === saved?.puzzle);
-  if (!record || !Array.isArray(saved.entries) || saved.entries.length !== 81 ||
+  if (!Object.hasOwn(pool, saved?.difficulty) ||
+      !Array.isArray(saved.entries) || saved.entries.length !== 81 ||
       !Array.isArray(saved.notes) || saved.notes.length !== 81) return false;
+
+  const records = [...pool[saved.difficulty], ...(legacyPuzzles[saved.difficulty] ?? [])];
+  let record = records.find(([clues]) => clues === saved.puzzle);
+  generated = false;
+  if (!record && saved.generated === true && typeof saved.puzzle === 'string' && /^[0-9]{81}$/.test(saved.puzzle)) {
+    const found = SudokuGenerator.search(Array.from(saved.puzzle, Number), 2, {nodeLimit: 12000});
+    if (!found.exhausted && found.count === 1) {
+      record = [saved.puzzle, found.answer];
+      generated = true;
+    }
+  }
+  if (!record) return false;
 
   [puzzle, solution] = record;
   difficulty = saved.difficulty;
+  if (generated) rememberPuzzle(puzzle);
   entries = saved.entries.map((digit, index) =>
     Number(puzzle[index]) || (Number.isInteger(digit) && digit >= 1 && digit <= 9 ? digit : 0));
   notes = saved.notes.map((marks, index) => !entries[index] && Array.isArray(marks)
@@ -463,5 +487,14 @@ let savedGame;
 try {
   savedGame = JSON.parse(localStorage.getItem('our-sudoku-v1'));
 } catch (error) {}
-if (!restoreGame(savedGame)) start('moderate');
+if (!restoreGame(savedGame)) {
+  refreshPlayedPuzzles();
+  const record = SudokuGenerator.generate('moderate', playedPuzzles);
+  if (record) {
+    start('moderate', record, true);
+  } else {
+    start('moderate', pool.moderate[0]);
+    $('status').textContent = 'Could not generate a new puzzle. A built-in Moderate puzzle is shown. Tap New puzzle to try again.';
+  }
+}
 </script></body></html>
